@@ -1,5 +1,10 @@
-﻿using Homework1_ASP.Models;
+﻿using Homework1_ASP.Dto;
+using Homework1_ASP.Exceptions;
+using Homework1_ASP.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace Homework1_ASP.Controllers
 {
@@ -11,6 +16,7 @@ namespace Homework1_ASP.Controllers
         private readonly HttpClient _httpClient;
         private readonly string _jsonPlaceholderBaseUrl;
         private readonly string _reqResBaseUrl;
+        private static readonly ConcurrentDictionary<string, UserDto> _users = new();
 
         public UserController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
@@ -50,6 +56,48 @@ namespace Homework1_ASP.Controllers
 
             var user = await response.Content.ReadFromJsonAsync<User>();
             return Ok(user);
+        }
+
+        [HttpPost("userform")]
+        public IActionResult SubmitUserForm([FromBody] UserDto model)
+        {
+            if (_users.ContainsKey(model.Username))
+                throw new UserExistsException();
+
+            if (!IsPasswordValid(model.Password, model.Username))
+                throw new BusinessException("Գաղտնաբառը պետք է լինի առնվազն 6 նիշ, պարունակի մեծատառ, փոքրատառ, թիվ, հայերեն տառ, հատուկ նշան և չպարունակի օգտանունը:");
+
+            _users[model.Username] = model;
+            Logger.LogUser(model);
+            return Ok(new { message = "Օգտագործողը հաջողությամբ ավելացվել է։" });
+        }
+
+        private bool IsPasswordValid(string password, string username)
+        {
+            if (string.IsNullOrWhiteSpace(password) || password.Length < 6) return false;
+            if (password.ToLower().Contains(username.ToLower())) return false;
+
+            bool hasUpper = password.Any(char.IsUpper);
+            bool hasLower = password.Any(char.IsLower);
+            bool hasDigit = password.Any(char.IsDigit);
+            bool hasSymbol = password.Any(ch => !char.IsLetterOrDigit(ch));
+            bool hasArmenian = Regex.IsMatch(password, "[ա-֏Ա-Ֆ]");
+
+            return hasUpper && hasLower && hasDigit && hasSymbol && hasArmenian;
+        }
+
+        [HttpPut("userform/{username}")]
+        public IActionResult UpdateField(string username, [FromBody] Dictionary<string, string> updates)
+        {
+            if (!_users.TryGetValue(username, out var user))
+                return NotFound();
+
+            foreach (var (key, value) in updates)
+            {
+                typeof(UserDto).GetProperty(key)?.SetValue(user, value);
+            }
+
+            return Ok();
         }
     }
 }
