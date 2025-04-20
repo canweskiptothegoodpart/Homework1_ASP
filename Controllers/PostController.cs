@@ -7,30 +7,40 @@ namespace Homework1_ASP.Controllers
     [Route("api/[controller]")]
     public class PostController: ControllerBase
     {
-        private static List<Post> Posts = new List<Post>
+    
+        private readonly HttpClient _httpClient;
+        private readonly string _jsonPlaceholderBaseUrl;
+        private readonly string _reqResBaseUrl;
+
+        public PostController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            new Post { UserId = 1, Id = 1, Title = "First Post", Body = "This is the first post" },
-            new Post { UserId = 2, Id = 2, Title = "Second Post", Body = "This is the second post" }
-        };
+            _httpClient = httpClientFactory.CreateClient();
+            _jsonPlaceholderBaseUrl = configuration["ApiUrls:JsonPlaceholder"];
+            _reqResBaseUrl = configuration["ApiUrls:ReqRes"];
+        }
 
 
-        [HttpGet("{userId}, {title}")]
-        public ActionResult<List<Post>> GetPost(int userId, string title)
+        [HttpGet]
+        public async Task<IActionResult> GetPost([FromQuery] int? userId, [FromQuery] string title)
         {
-            var posts = Posts.Where(p => p.UserId == userId && p.Title == title).ToList();
-            if (!posts.Any()) return NoContent();
+            var query = new List<string>();
+            if (userId.HasValue) query.Add($"userId={userId.Value}");
+            if (!string.IsNullOrEmpty(title)) query.Add($"title={System.Net.WebUtility.UrlEncode(title)}");
+
+            var queryString = query.Any() ? "?" + string.Join("&", query) : string.Empty;
+            var url = $"{_jsonPlaceholderBaseUrl}/posts{queryString}";
+
+            var posts = await _httpClient.GetFromJsonAsync<List<Post>>(url);
+            if (posts == null || !posts.Any()) return NoContent();
             return Ok(posts);
         }
 
         [HttpDelete("{id}")]
-        public ActionResult DeletePost(int id)
+        public async Task<IActionResult> DeletePost(int id)
         {
-            var post = Posts.FirstOrDefault(p => p.Id == id);
-            if (post != null)
-            {
-                Posts.Remove(post);
-            }
-            return NoContent();
+            var url = $"{_jsonPlaceholderBaseUrl}/posts/{id}";
+            var response = await _httpClient.DeleteAsync(url);
+            return NoContent(); 
         }
     }
 }
