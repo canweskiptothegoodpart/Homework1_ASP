@@ -8,42 +8,47 @@ namespace Homework1_ASP.Controllers
     public class UserController : ControllerBase
     {
        
-        private static List<User> Users = new List<User>
-        {
-            new User { Id = 1, Email = "user1@example.com", FirstName = "John", LastName = "Doe", Avatar = "avatar1.png" },
-            new User { Id = 2, Email = "user2@example.com", FirstName = "Jane", LastName = "Smith", Avatar = "avatar2.png" }
-        };
+        private readonly HttpClient _httpClient;
+        private readonly string _jsonPlaceholderBaseUrl;
+        private readonly string _reqResBaseUrl;
 
-       
+        public UserController(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+        {
+            _httpClient = httpClientFactory.CreateClient();
+            _jsonPlaceholderBaseUrl = configuration["ApiUrls:JsonPlaceholder"];
+            _reqResBaseUrl = configuration["ApiUrls:ReqRes"];
+        }
+
+
         [HttpPost]
-        public ActionResult<User> CreateUser([FromBody] User newUser)
+        public async Task<IActionResult> CreateUser([FromBody] User newUser)
         {
-            if (Users.Any(u => u.Id == newUser.Id))
-                return BadRequest("User with this ID already exists");
+            var url = $"{_reqResBaseUrl}/users";
+            var response = await _httpClient.PostAsJsonAsync(url, newUser);
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
 
-            Users.Add(newUser);
-            return CreatedAtAction(nameof(GetUserById), new { id = newUser.Id }, newUser);
+            var createdUser = await response.Content.ReadFromJsonAsync<User>();
+            return Created("users/" + createdUser.Id, createdUser);
         }
 
-        [HttpGet("{id}")]
-        public ActionResult<User> GetUserById(int id)
-        {
-            var user = Users.FirstOrDefault(u => u.Id == id);
-            if (user == null) return NoContent();
-            return Ok(user);
-        }
+        //[HttpGet("{id}")]
+        //public ActionResult<User> GetUserById(int id)
+        //{
+        //    var user = Users.FirstOrDefault(u => u.Id == id);
+        //    if (user == null) return NoContent();
+        //    return Ok(user);
+        //}
 
         [HttpPut("users/{id}")]
-        public ActionResult<User> UpdateUser(int id, [FromBody] User updatedUser)
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] User updatedUser)
         {
-            var user = Users.FirstOrDefault(u => u.Id == id);
-            if (user == null) return NotFound("User not found");
+            var url = $"{_reqResBaseUrl}/users/{id}";
+            var response = await _httpClient.PutAsJsonAsync(url, updatedUser);
+            if (!response.IsSuccessStatusCode)
+                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
 
-            user.Email = updatedUser.Email;
-            user.FirstName = updatedUser.FirstName;
-            user.LastName = updatedUser.LastName;
-            user.Avatar = updatedUser.Avatar;
-
+            var user = await response.Content.ReadFromJsonAsync<User>();
             return Ok(user);
         }
     }
